@@ -1,4 +1,4 @@
-//
+﻿//
 // Copyright (c) .NET Foundation and Contributors
 // Portions Copyright (c) Microsoft Corporation. All rights reserved.
 // Portions Copyright (C) 2002-2019 Free Software Foundation, Inc. All rights reserved.
@@ -518,17 +518,17 @@ HRESULT Library_corlib_native_System_Convert::NativeToDouble___STATIC__R8__STRIN
     NANOCLR_CLEANUP_END();
 }
 
-HRESULT Library_corlib_native_System_Convert::NativeToDateTime___STATIC__SystemDateTime__STRING__BOOLEAN__BYREF_BOOLEAN(
-    CLR_RT_StackFrame &stack)
+HRESULT Library_corlib_native_System_Convert::
+    NativeToDateTime___STATIC__VOID__STRING__BOOLEAN__BYREF_BOOLEAN__BYREF_SystemDateTime(CLR_RT_StackFrame &stack)
 {
     NANOCLR_HEADER();
 
-    uint64_t ticks;
-    CLR_INT64 *value;
+    CLR_INT64 *pTicks;
 
     char *str = (char *)stack.Arg0().RecoverString();
     char *conversionResult = NULL;
     // char *str = (char *)"1999-10-31 10:00:00Z";
+    uint64_t ticks;
 
     // grab parameter with flag to throw on failure
     bool throwOnFailure = (bool)stack.Arg1().NumericByRefConst().u1;
@@ -559,12 +559,14 @@ HRESULT Library_corlib_native_System_Convert::NativeToDateTime___STATIC__SystemD
     if (conversionResult == NULL)
     {
         // failed to parse string
+
         NANOCLR_SET_AND_LEAVE(CLR_E_FORMAT_EXCEPTION);
     }
     else
     {
-        value = Library_corlib_native_System_DateTime::NewObject(stack);
-        *value = ticks;
+        // get pointer to DateTime value type in parameter 3
+        pTicks = DateTime::GetValuePtr(stack.Arg3());
+        *pTicks = ticks;
     }
 
     NANOCLR_CLEANUP();
@@ -590,13 +592,13 @@ HRESULT Library_corlib_native_System_Convert::ToBase64String___STATIC__STRING__S
 #if (SUPPORT_ANY_BASE_CONVERSION == TRUE)
 
     size_t outputLength;
-    char *outArray = NULL;
+    unsigned char *outArray = NULL;
     char *outArrayWitLineBreak = NULL;
-    uint8_t *inArrayPointer = NULL;
-    int32_t lineBreakCount;
+    unsigned char *inArrayPointer = NULL;
+    size_t lineBreakCount;
     uint16_t offsetIndex = 0;
-    uint8_t count = 0;
-    uint16_t result;
+    size_t count = 0;
+    int result;
 
     CLR_RT_HeapBlock_Array *inArray = stack.Arg0().DereferenceArray();
     size_t offset = (size_t)stack.Arg1().NumericByRef().s4;
@@ -605,14 +607,14 @@ HRESULT Library_corlib_native_System_Convert::ToBase64String___STATIC__STRING__S
 
     FAULT_ON_NULL_ARG(inArray);
 
-    inArrayPointer = (uint8_t *)inArray->GetFirstElement();
+    inArrayPointer = inArray->GetFirstElement();
     inArrayPointer += (offset * sizeof(uint8_t));
 
     // compute base64 string length
     outputLength = 4 * ((length + 2) / 3);
 
     // need malloc with base64 string length plus string terminator (+1)
-    outArray = (char *)platform_malloc(outputLength + 1);
+    outArray = (unsigned char *)platform_malloc(outputLength + 1);
 
     // check if have allocation
     if (outArray == NULL)
@@ -622,8 +624,7 @@ HRESULT Library_corlib_native_System_Convert::ToBase64String___STATIC__STRING__S
 
     // perform the operation
     // need to tweak the parameter with the output length because it includes room for the terminator
-    result =
-        mbedtls_base64_encode((unsigned char *)outArray, (outputLength + 1), &outputLength, inArrayPointer, length);
+    result = mbedtls_base64_encode(outArray, (outputLength + 1), &outputLength, inArrayPointer, length);
 
     if (result != 0)
     {
@@ -640,7 +641,7 @@ HRESULT Library_corlib_native_System_Convert::ToBase64String___STATIC__STRING__S
         // break
         outArrayWitLineBreak = (char *)platform_malloc(outputLength + (lineBreakCount * 2) + 2);
 
-        for (int i = 0; i <= lineBreakCount; i++)
+        for (size_t i = 0; i <= lineBreakCount; i++)
         {
             // how many chars to copy
             if (outputLength > 76)
@@ -689,7 +690,7 @@ HRESULT Library_corlib_native_System_Convert::ToBase64String___STATIC__STRING__S
     {
         // set a return result in the stack argument using the appropriate SetResult according to the variable type (a
         // string here)
-        NANOCLR_CHECK_HRESULT(stack.SetResult_String(outArray));
+        NANOCLR_CHECK_HRESULT(stack.SetResult_String((const char *)outArray));
     }
 
     // need to free memory from arrays
@@ -716,11 +717,11 @@ HRESULT Library_corlib_native_System_Convert::FromBase64String___STATIC__SZARRAY
 #if (SUPPORT_ANY_BASE_CONVERSION == TRUE)
 
     CLR_RT_HeapBlock_String *inString = NULL;
-    uint32_t outputLength;
-    char *outArray = NULL;
+    size_t outputLength;
+    unsigned char *outArray = NULL;
     CLR_UINT8 *returnArray;
-    uint16_t result;
-    uint32_t length;
+    int result;
+    size_t length;
 
     inString = stack.Arg0().DereferenceString();
     FAULT_ON_NULL(inString);
@@ -733,19 +734,21 @@ HRESULT Library_corlib_native_System_Convert::FromBase64String___STATIC__SZARRAY
     outputLength = length / 4 * 3;
 
     // alloc output array
-    outArray = (char *)platform_malloc(outputLength + 1);
+    outArray = (unsigned char *)platform_malloc(outputLength + 1);
     // check malloc success
     if (outArray == NULL)
     {
         NANOCLR_SET_AND_LEAVE(CLR_E_OUT_OF_MEMORY);
     }
 
+    memset(outArray, 0, outputLength + 1);
+
     // perform the operation
     // need to tweak the parameter with the output length because it includes room for the terminator
     result = mbedtls_base64_decode(
-        (unsigned char *)outArray,
-        (size_t)(outputLength + 1),
-        (size_t *)&outputLength,
+        outArray,
+        (outputLength + 1),
+        &outputLength,
         (const unsigned char *)inString->StringText(),
         length);
 
